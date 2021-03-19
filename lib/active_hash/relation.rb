@@ -36,7 +36,7 @@ module ActiveHash
     end
 
     def find_by!(options)
-      find_by(options) || (raise RecordNotFound.new("Couldn't find #{klass.name}"))
+      find_by(options) || (raise RecordNotFound.new("Couldn't find #{klass.name}", klass.name))
     end
 
     def find(id = nil, *args, &block)
@@ -48,16 +48,18 @@ module ActiveHash
         when Array
           id.map { |i| find(i) }
         when nil
-          raise RecordNotFound.new("Couldn't find #{klass.name} without an ID") unless block_given?
+          raise RecordNotFound.new("Couldn't find #{klass.name} without an ID", klass.name, "id") unless block_given?
           records.find(&block) # delegate to Enumerable#find if a block is given
         else
           find_by_id(id) || begin
-            raise RecordNotFound.new("Couldn't find #{klass.name} with ID=#{id}")
+            raise RecordNotFound.new("Couldn't find #{klass.name} with ID=#{id}", klass.name, "id", id)
           end
       end
     end
 
     def find_by_id(id)
+      return where(id: id).first if query_hash.present?
+
       index = klass.send(:record_index)[id.to_s] # TODO: Make index in Base publicly readable instead of using send?
       index and records[index]
     end
@@ -103,7 +105,7 @@ module ActiveHash
     attr_writer :query_hash, :klass, :all_records, :records_dirty
 
     def records
-      if @records.nil? || records_dirty
+      if !defined?(@records) || @records.nil? || records_dirty
         reload
       else
         @records
@@ -133,7 +135,7 @@ module ActiveHash
         if match.kind_of?(Array)
           match.any? { |v| normalize(v) == normalize(record[col]) }
         else
-          normalize(record[col]) == normalize(match)
+          normalize(match) === normalize(record[col])
         end
       end
     end
